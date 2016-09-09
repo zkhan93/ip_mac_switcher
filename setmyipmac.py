@@ -1,6 +1,13 @@
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 import time
+import sys
+
+skipTopRecords=0
+if len(sys.argv)>1:
+    skipTopRecords=int(sys.argv[1])
+recordProcessed=skipTopRecords
+
 driver=None
 
 ELEMENT_USERNAME_ID='username' #username field id (css selector)
@@ -8,23 +15,27 @@ ELEMENT_PASSWORD_ID='password' #password inuput field id (css selector)
 ELEMENT_LOGIN_BTN_ID='loginBtn' #login button id (css selector) not used
 
 FRAME_TAG='frame' #frame or iframe
-FRAME_NAME='main' #frame or iframe name attribute value
+NAV_FRAME_NAME='bottomLeftFrame' #frame or iframe name attribute value
+MAIN_FRAME_NAME='mainFrame'
 
-CONNECTION_NAME='Somnath' #Wifi connection ssid
+CONNECTION_NAME='Khan\'s AP' #Wifi connection ssid
 
-ROUTER_URL='http://192.168.2.1'
-
+ROUTER_IP='192.168.2.1'
+ROUTER_REBOOT_TIME=20 #in seconds
 CHROME_DRIVER_RELATIVE_PATH="./drivers/chromedriver.exe"
 URL_TO_CHECK_INTERNET='https://www.google.co.in'
 
 IP_MAC_FILE_LIST_RELATIVE_PATH='ip_macs.txt'
-def init():
+def init(username,password):
     global driver
     global initialized
     driver=webdriver.Chrome(CHROME_DRIVER_RELATIVE_PATH)
-    driver.get(ROUTER_URL)
+    driver.get('http://'+username+':'+password+'@'+ROUTER_IP)
     initialized=True
 
+'''
+Not used for my router anymore
+'''
 def login(username,password):
     global driver
     ele_username=driver.find_element_by_id(ELEMENT_USERNAME_ID)
@@ -36,58 +47,84 @@ def login(username,password):
     ele_password.send_keys(password)
     ele_password.send_keys(Keys.RETURN)
 
-def switchFrame():
+def switchFrame(name):
+    global driver
+    driver.switch_to_default_content()
     frame=None
     for f in driver.find_elements_by_tag_name(FRAME_TAG):
-        if f.get_attribute('name')==FRAME_NAME:
+        if f.get_attribute('name')==name:
             frame=f
             break;
     if frame==None:
-        print 'aborting no frame with name',FRAME_NAME,'exists'
+        print 'aborting no frame with name',name,'exists'
         return False
     driver.switch_to_frame(frame)
 
-def navigateToInternetSetup():
+def navigateTo(path):
     global driver
-    for element in driver.find_elements_by_tag_name('a'):
-        if element.get_attribute('innerHTML')=='Setup':
-            element.send_keys(Keys.RETURN)
+    switchFrame(NAV_FRAME_NAME)
+    found=False
+    for seg in path:
+        found=False
+        for element in driver.find_elements_by_tag_name('a'):
+            if element.get_attribute('innerHTML')==seg:
+                element.send_keys(Keys.RETURN)
+                print seg,'->',
+                found=True
+                break;
+        if not found:
+            print seg,'not found'
             break;
-    for element in driver.find_elements_by_tag_name('a'):
-        if element.get_attribute('innerHTML')=='Internet Setup':
-            element.send_keys(Keys.RETURN)
-            break;
+    switchFrame(MAIN_FRAME_NAME)
+    return found
 
-def setIpMac(ip,mac):
-    global driver
-    for element in driver.find_elements_by_tag_name('input'):
-        if element.get_attribute('name')=='mac_clone' and element.get_attribute('value')=='2':
-            element.click()
-            break;
-
-    ele_ip=None
+def setMac(mac):
+    navigateTo(['Network','MAC Clone'])
     ele_mac=None
-
     for element in driver.find_elements_by_tag_name('input'):
-        if element.get_attribute('name')=='staip_ipaddr':
-            ele_ip=element
-        elif element.get_attribute('name')=='mac_clone_value':
+        if element.get_attribute('name')=='mac1':
             ele_mac=element
-        if ele_ip and ele_mac:
+            break;
+    if ele_mac.get_attribute("value")==mac:
+        print 'already using this MAC address'
+        return False
+    ele_mac.clear()
+    ele_mac.send_keys(mac.upper())
+    for element in driver.find_elements_by_tag_name('input'):
+        if element.get_attribute('type')=='submit' and element.get_attribute('name')=='Save':
+            element.send_keys(Keys.RETURN)
+            return True
+    print 'coudn\'t save MAC'
+    return False
+
+def setIp(ip):
+    navigateTo(['Network','WAN'])
+    ele_ip=None
+    for element in driver.find_elements_by_tag_name('input'):
+        if element.get_attribute('name')=='ip':
+            ele_ip=element
             break;
     if ele_ip.get_attribute("value")==ip:
-        print 'already using this combination'
+        print 'already using this IP'
         return False
     ele_ip.clear()
     ele_ip.send_keys(ip)
-    ele_mac.clear()
-    ele_mac.send_keys(mac)
-    ele_ip=None
-    ele_mac=None
     for element in driver.find_elements_by_tag_name('input'):
-        if element.get_attribute('type')=='submit' and element.get_attribute('name')=='save':
+        if element.get_attribute('type')=='submit' and element.get_attribute('name')=='Save':
             element.send_keys(Keys.RETURN)
             return True
+    print 'coudn\'t save ip'
+    return False
+
+def setIpMac(ip,mac):
+    if setIp(ip):
+        if setMac(mac):
+            return True
+        else:
+            print 'cannot set MAC, might already using this'
+    else:
+        print 'cannot set ip, might already using this'
+    return False
 
 def isConnectedToDesiredNetwork():
     import subprocess
@@ -109,33 +146,26 @@ ls=file.read().split('\n')
 file.close()
 ip=None
 mac=None
-
 initialized=False
-isLoggedIn=False
 skip=False
 progress=['|','/','-','\\']
 pi=0
-for x in ls:
+
+for x in ls[skipTopRecords:]:
     if skip or not isInternetConnected():
         skip=False #skipped now need to reset skip counter
         if not initialized:
-            init()
+            init('admin','admin')
         if x:
-            if not isLoggedIn:
-                login('Admin','@dmin')
-                switchFrame()
-                driver.implicitly_wait(10);
-                navigateToInternetSetup()
             ip,mac=x.split()
-            mac=mac[0:2]+':'+mac[2:4]+':'+mac[4:6]+':'+mac[6:8]+':'+mac[8:10]+':'+mac[10:12]
-            print 'checking',ip,mac
+            splitter='-'
+            mac=mac[0:2]+splitter+mac[2:4]+splitter+mac[4:6]+splitter+mac[6:8]+splitter+mac[8:10]+splitter+mac[10:12]
+            print 'checking',ip,mac,recordProcessed
             if not setIpMac(ip,mac):
                 print 'cannot set ip mac, try again later'
-                isLoggedIn=True
             else:
-                isLoggedIn=False # logged out login again
                 print 'waiting for router to reboot'
-                for t in range(35):
+                for t in range(ROUTER_REBOOT_TIME):
                     print '\b'+progress[pi%4],'\b\b',
                     pi+=1
                     time.sleep(1);
@@ -157,4 +187,5 @@ for x in ls:
             break;
         else:
             skip=True
-            print 'okay! trying others'
+            print 'okay! trying others position:',recordProcessed
+    recordProcessed+=1
