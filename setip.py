@@ -45,18 +45,28 @@ def switchFrame():
     if frame==None:
         print 'aborting no frame with name',FRAME_NAME,'exists'
         return False
-    driver.switch_to_frame(frame)
+    else:
+        driver.switch_to_frame(frame)
+        print 'switched to ',frame
 
 def navigateToInternetSetup():
     global driver
-    for element in driver.find_elements_by_tag_name('a'):
-        if element.get_attribute('innerHTML')=='Setup':
-            element.send_keys(Keys.RETURN)
-            break;
-    for element in driver.find_elements_by_tag_name('a'):
-        if element.get_attribute('innerHTML')=='Internet Setup':
-            element.send_keys(Keys.RETURN)
-            break;
+    driver.find_element_by_link_text('Setup').click()
+    driver.find_element_by_link_text('Internet Setup').click()
+    # for element in driver.find_elements_by_tag_name('a'):
+    #     if element.get_attribute('innerHTML')=='Setup':
+    #         print 'found Setup',element
+    #         element.click()#(Keys.RETURN)
+    #         break;
+    #     else:
+    #         print element.get_attribute('innerHTML')
+    # for element in driver.find_elements_by_tag_name('a'):
+    #     if element.get_attribute('innerHTML')=='Internet Setup':
+    #         print 'found Internet Setup',element
+    #         element.send_keys(Keys.RETURN)
+    #         break;
+    #     else:
+    #         print element.get_attribute('innerHTML')
 
 def setIpMac(ip,mac):
     global driver
@@ -124,7 +134,7 @@ for x in ls:
             if not isLoggedIn:
                 login('Admin','@dmin')
                 switchFrame()
-                driver.implicitly_wait(10);
+                driver.implicitly_wait(10)
                 navigateToInternetSetup()
             ip,mac=x.split()
             mac=mac[0:2]+':'+mac[2:4]+':'+mac[4:6]+':'+mac[6:8]+':'+mac[8:10]+':'+mac[10:12]
