@@ -1,6 +1,8 @@
 from selenium import webdriver
 from selenium.webdriver.common.keys import Keys
 import time
+import sys
+
 driver=None
 
 ELEMENT_USERNAME_ID='username' #username field id (css selector)
@@ -10,18 +12,31 @@ ELEMENT_LOGIN_BTN_ID='loginBtn' #login button id (css selector) not used
 FRAME_TAG='frame' #frame or iframe
 FRAME_NAME='main' #frame or iframe name attribute value
 
-CONNECTION_NAME='Somnath' #Wifi connection ssid
+CONNECTION_NAME='AndroidAP' #Wifi connection ssid
 
 ROUTER_URL='http://192.168.2.1'
 
 CHROME_DRIVER_RELATIVE_PATH="./drivers/chromedriver.exe"
+CHROME_DRIVER_RELATIVE_PATH_LINUX="./drivers/chromedriver"
+
 URL_TO_CHECK_INTERNET='https://www.google.co.in'
 
 IP_MAC_FILE_LIST_RELATIVE_PATH='ip_macs.txt'
+
+skipTopRecords=0
+linux=False
+if len(sys.argv)>1:
+    skipTopRecords=int(sys.argv[1])
+    linux=sys.argv[2]=='linux'
+recordProcessed=skipTopRecords
+
 def init():
     global driver
     global initialized
-    driver=webdriver.Chrome(CHROME_DRIVER_RELATIVE_PATH)
+    if linux:
+        driver=webdriver.Chrome(CHROME_DRIVER_RELATIVE_PATH_LINUX)
+    else:
+        driver=webdriver.Chrome(CHROME_DRIVER_RELATIVE_PATH)
     driver.get(ROUTER_URL)
     initialized=True
 
@@ -38,16 +53,18 @@ def login(username,password):
 
 def switchFrame():
     frame=None
-    for f in driver.find_elements_by_tag_name(FRAME_TAG):
-        if f.get_attribute('name')==FRAME_NAME:
-            frame=f
-            break;
-    if frame==None:
-        print 'aborting no frame with name',FRAME_NAME,'exists'
-        return False
-    else:
-        driver.switch_to_frame(frame)
-        print 'switched to ',frame
+    while True:
+        for f in driver.find_elements_by_tag_name(FRAME_TAG):
+            if f.get_attribute('name')==FRAME_NAME:
+                frame=f
+                break;
+        if frame==None:
+            print 'no frame with name',FRAME_NAME,'exists refreshed and trying again'
+            driver.refresh()
+        else:
+            driver.switch_to_frame(frame)
+            print 'switched to ',frame
+            return True
 
 def navigateToInternetSetup():
     global driver
@@ -101,7 +118,10 @@ def setIpMac(ip,mac):
 
 def isConnectedToDesiredNetwork():
     import subprocess
-    return CONNECTION_NAME in subprocess.check_output("netsh wlan show interfaces")
+    if linux:
+        return CONNECTION_NAME in subprocess.call("iwgetid -r")
+    else:
+        return CONNECTION_NAME in subprocess.check_output("netsh wlan show interfaces")
 
 def isInternetConnected():
     import urllib2
@@ -125,7 +145,7 @@ isLoggedIn=False
 skip=False
 progress=['|','/','-','\\']
 pi=0
-for x in ls:
+for x in ls[skipTopRecords:]:
     if skip or not isInternetConnected():
         skip=False #skipped now need to reset skip counter
         if not initialized:
@@ -138,7 +158,7 @@ for x in ls:
                 navigateToInternetSetup()
             ip,mac=x.split()
             mac=mac[0:2]+':'+mac[2:4]+':'+mac[4:6]+':'+mac[6:8]+':'+mac[8:10]+':'+mac[10:12]
-            print 'checking',ip,mac
+            print 'checking',ip,mac,recordProcessed
             if not setIpMac(ip,mac):
                 print 'cannot set ip mac, try again later'
                 isLoggedIn=True
@@ -167,4 +187,5 @@ for x in ls:
             break;
         else:
             skip=True
-            print 'okay! trying others'
+            print 'okay! trying others',recordProcessed
+    recordProcessed+=1

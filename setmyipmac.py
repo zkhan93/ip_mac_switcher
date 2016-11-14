@@ -22,21 +22,30 @@ CONNECTION_NAME='Khan\'s AP' #Wifi connection ssid
 
 ROUTER_IP='192.168.2.1'
 ROUTER_REBOOT_TIME=20 #in seconds
-CHROME_DRIVER_RELATIVE_PATH="./drivers/chromedriver.exe"
+CHROME_DRIVER_RELATIVE_PATH="./drivers/chromedriver"
 URL_TO_CHECK_INTERNET='https://www.google.co.in'
 
-IP_MAC_FILE_LIST_RELATIVE_PATH='ip_macs.txt'
-def init(username,password):
+IP_MAC_FILE_LIST_RELATIVE_PATH='ip_macs - Copy.txt'
+
+username='admin'
+password='admin'
+
+def init():
     global driver
     global initialized
-    driver=webdriver.Chrome(CHROME_DRIVER_RELATIVE_PATH)
+    options = webdriver.ChromeOptions();
+    options.add_argument("test-type");
+    options.add_argument("--start-maximized");
+    options.add_argument("--disable-web-security");
+    options.add_argument("--allow-running-insecure-content");
+    driver=webdriver.Chrome(CHROME_DRIVER_RELATIVE_PATH,chrome_options=options)
     driver.get('http://'+username+':'+password+'@'+ROUTER_IP)
     initialized=True
 
 '''
 Not used for my router anymore
 '''
-def login(username,password):
+def login():
     global driver
     ele_username=driver.find_element_by_id(ELEMENT_USERNAME_ID)
     ele_password=driver.find_element_by_id(ELEMENT_PASSWORD_ID)
@@ -56,7 +65,10 @@ def switchFrame(name):
             frame=f
             break;
     if frame==None:
-        print 'aborting no frame with name',name,'exists'
+        print 'no frame with name',name,'exists\n refreshed and trying'
+        driver.refresh()
+        time.sleep(3)
+        switchFrame(name)
         return False
     driver.switch_to_frame(frame)
 
@@ -68,13 +80,19 @@ def navigateTo(path):
         found=False
         for element in driver.find_elements_by_tag_name('a'):
             if element.get_attribute('innerHTML')==seg:
-                element.send_keys(Keys.RETURN)
+                element.click()
                 print seg,'->',
                 found=True
                 break;
         if not found:
             print seg,'not found'
-            break;
+            break
+    if not found:
+        print 'trying after refresh'
+        switchFrame(MAIN_FRAME_NAME)
+        driver.refresh()
+        time.sleep(1)
+        navigateTo(path)
     switchFrame(MAIN_FRAME_NAME)
     return found
 
@@ -155,7 +173,7 @@ for x in ls[skipTopRecords:]:
     if skip or not isInternetConnected():
         skip=False #skipped now need to reset skip counter
         if not initialized:
-            init('admin','admin')
+            init()
         if x:
             ip,mac=x.split()
             splitter='-'
